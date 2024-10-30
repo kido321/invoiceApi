@@ -54,7 +54,7 @@ from pdf_generation import generate_invoice
 
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/process_csv": {"origins": "http://localhost:3000"}}
 
 # Load environment variables (you can keep this if you have other env variables)
 
