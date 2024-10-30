@@ -1,50 +1,4 @@
 
-# invoice_generator.py
-
-import pandas as pd
-import os
-from reportlab.platypus import (
-    SimpleDocTemplate,
-    Table,
-    TableStyle,
-    Paragraph,
-    Spacer,
-    Image,
-)
-from reportlab.lib.pagesizes import LETTER
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm, inch
-
-# Custom canvas to add page numbers
-class NumberedCanvas(canvas.Canvas):
-    def __init__(self, *args, **kwargs):
-        canvas.Canvas.__init__(self, *args, **kwargs)
-        self._saved_page_states = []
-
-    def showPage(self):
-        self._saved_page_states.append(dict(self.__dict__))
-        self._startPage()
-
-    def save(self):
-        num_pages = len(self._saved_page_states)
-        for state in self._saved_page_states:
-            self.__dict__.update(state)
-            self.draw_page_number(num_pages)
-            canvas.Canvas.showPage(self)
-        canvas.Canvas.save(self)
-
-    def draw_page_number(self, page_count):
-        self.setFont("Helvetica", 9)
-        self.drawRightString(
-            200 * mm, 10 * mm, f"Page {self._pageNumber} of {page_count}"
-        )
-
-
-
-# app.py
-# app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
@@ -54,7 +8,7 @@ from pdf_generation import generate_invoice
 
 
 app = Flask(__name__)
-CORS(app, resources={r"/process_csv": {"origins": "http://localhost:3000"}}
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 # Load environment variables (you can keep this if you have other env variables)
 
