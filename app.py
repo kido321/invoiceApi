@@ -13,6 +13,14 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load environment variables (you can keep this if you have other env variables)
 
+
+@app.route('/')
+def hello():
+    return "Hello, World!"
+
+
+
+
 @app.route('/process_csv/', methods=['POST'])
 def process_csv():
     try:
