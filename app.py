@@ -8,14 +8,7 @@ from pdf_generation import generate_invoice
 
 
 app = Flask(__name__)
-# CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})
-CORS(app, resources={
-    r"/process_csv/*": {
-        "origins": ["http://localhost:3000"],  # Add any other origins you need
-        "methods": ["POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
-    }
-})
+CORS(app)
 # Load environment variables (you can keep this if you have other env variables)
 
 @app.route('/process_csv/', methods=['POST'])
