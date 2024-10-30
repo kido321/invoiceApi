@@ -5,7 +5,7 @@ import pandas as pd
 from io import BytesIO
 import base64
 from pdf_generation import generate_invoice
-
+import os
 
 app = Flask(__name__)
 # CORS(app, resources={r"/process_csv/*": {"origins": "http://localhost:3000"}})
@@ -71,3 +71,5 @@ def process_data(df):
 
 if __name__ == '__main__': # For compatibility across platforms
     app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
