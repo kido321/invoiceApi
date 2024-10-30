@@ -18,7 +18,9 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 def hello():
     return "Hello, World!"
 
-
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204
 
 
 @app.route('/process_csv/', methods=['POST'])
