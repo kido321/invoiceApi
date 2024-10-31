@@ -18,7 +18,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load environment variables (you can keep this if you have other env variables)
 load_dotenv()
-DATABASE_URL = os.getenv('DATABASE_URL')
+
 
 
 print(DATABASE_URL)
