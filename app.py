@@ -21,7 +21,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 
 
-print(DATABASE_URL)
+# print(DATABASE_URL)
 @app.route('/')
 def hello():
     return "Hello, World!"
