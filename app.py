@@ -1,4 +1,4 @@
-
+#app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
@@ -23,16 +23,30 @@ def favicon():
     return '', 204
 
 
-@app.route('/process_csv/', methods=['POST'])
-def process_csv():
+@app.route('/process_excel/', methods=['POST'])
+def process_excel():
     try:
         file = request.files['file']
         if not file:
             return jsonify({'error': 'No file provided'}), 400
 
-        df = pd.read_csv(file, dtype={"DRIVER NAME": str})
+        # Read file contents into memory
+        file_contents = file.read()
+        excel_file = BytesIO(file_contents)
 
-        # Handle missing values and data cleaning
+        # Optionally, reset file pointer
+        # file.seek(0)
+
+        # Read the second sheet from the Excel file
+        try:
+            df = pd.read_excel(excel_file, sheet_name=1, dtype={"DRIVER NAME": str}, engine='openpyxl')
+        except Exception as e:
+            print(f"Error reading Excel file: {e}")
+            return jsonify({'error': f'Error reading Excel file: {str(e)}'}), 500
+
+        print(df, 'DF')  # For debugging purposes
+
+        # Proceed with data processing
         df = process_data(df)
 
         # Remove rows where DRIVER NAME is missing
@@ -53,7 +67,24 @@ def process_csv():
         return jsonify({'message': 'PDFs generated successfully.', 'pdfs': driver_pdfs}), 200
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"General error: {e}")
+        return jsonify({'error': f'An error occurred while processing the Excel file: {str(e)}'}), 500
+
+def process_data(df):
+    # Implement your data processing and cleaning logic
+    df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+
+    numeric_columns = ["GROSS PAY", "DEDUCTION", "SPIFF", "NET PAY", "MILES"]
+
+    # Clean and convert numeric columns
+    def clean_numeric(series):
+        series = series.replace('[\$,]', '', regex=True)
+        return pd.to_numeric(series, errors='coerce')
+
+    df[numeric_columns] = df[numeric_columns].apply(clean_numeric)
+    df[numeric_columns] = df[numeric_columns].fillna(0)
+
+    return df
 
 def process_data(df):
     # Implement your data processing and cleaning logic
