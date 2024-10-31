@@ -17,7 +17,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load environment variables (you can keep this if you have other env variables)
-load_dotenv()
+# load_dotenv()
 
 
 
