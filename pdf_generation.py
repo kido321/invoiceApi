@@ -16,11 +16,13 @@ def calculate_net_pay(driver_name: str, gross_pay: float, is_final_total: bool =
         return base_pay + 600 if is_final_total else base_pay  # Only add $600 to final total
     elif driver_name == "Bilal  Bouhssane":
         return gross_pay * 0.8  # 80% of income
-    elif driver_name == "Abdul  Latif  Hassani":
+    elif driver_name == "Abdul Latif Hassani":
+        print(gross_pay, 'gross_pay' , driver_name)
         return gross_pay * 0.73
     elif driver_name == "Chadi  Tebah":
         return gross_pay * 0.73
-    elif driver_name == "Fatsah  Kennouche":
+    elif driver_name == "Fatsah  Kennouche ":
+        print(gross_pay, 'gross_pay')
         return gross_pay * 0.73
     elif driver_name == "Ghulam  Sarwar Safi":
         return gross_pay * 0.73
