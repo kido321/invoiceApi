@@ -67,6 +67,7 @@ def process_excel():
 
         for driver_name, group in grouped_data:
             # Generate PDF invoice
+            print(driver_name)
             pdf_buffer = generate_invoice(driver_name, group)
             # Encode PDF to base64 string for transmission
             pdf_base64 = base64.b64encode(pdf_buffer).decode('utf-8')
@@ -150,8 +151,8 @@ def get_driver_email(driver_name):
         'Adel  Amghar': 'adelamghar2022@gmail.com',
         'Adel  Benidiri': 'adelpitbenidiri@gmail.com',
         'Ahcene  Hamaoui': 'Hamahcene532@gmail.com',
-        'Ahmad  Ferdaws  Ayar': 'ayarferdaws@gmail.com',
-        'Alaa  K  Ali': 'alaaamar198577@gmail.com',
+        'Ahmad Ferdaws  Ayar': 'ayarferdaws@gmail.com',
+        'Alaa K Ali': 'alaaamar198577@gmail.com',
         'Ali  Arghash': 'arsalan.asghar@yahoo.com',
         'Amel  Amriou': 'amriouamel1999@gmail.com',
         'Atiqullah  Alimi': 'atiq.alimi2021@gmail.com',
@@ -168,16 +169,16 @@ def get_driver_email(driver_name):
         'Harsh  Vachani': 'harshvachhani05@gmail.com',
         'Inamullah  Hamraz': 'inamullahhamraz@gmail.com',
         'Juba  Messali': 'messaliyouba2@gmail.com',
-        'LWABOSH  B  PUKA': 'pukalwaboshi@gmail.com',
+        'LWABOSH B PUKA': 'pukalwaboshi@gmail.com',
         'Loucif  Bechiti': 'loucif2011@live.fr',
         'Mustapa  Quraishi': 'mustafahaji160@gmail.com',
         'Naim  Ayad': 'naimayad38@gmail.com',
         'Naima  Zabi': 'Nzabi@uapschool.org',
         'Najibullah  Halimi': 'najibullahhalimi3@gmail.com',
         'Noor  Haidary': 'ra_ml2001@yahoo.com',
-        'Rasool  Ismael  Munshid': 'ra_ml2001@yahoo.com',
+        'Rasool Ismael Munshid': 'ra_ml2001@yahoo.com',
         'Rouzbeh  Shure': 'rouzbeh.shure@gmail.com',
-        'Said  Bouza': 'bouzasaid4@gmail.com',
+        'Said   Bouza': 'bouzasaid4@gmail.com',
         'Salahuddin  Neromand': 's.neromand@gmail.com',
         'Saliha  Mammeri': 'bouzasaliha21@gmail.com',
         'Samuel  Suzi': 'samelsuzi@gmail.com',
@@ -186,7 +187,7 @@ def get_driver_email(driver_name):
         'Walid  Boukhanouf': 'boukhanoufwalid@gmail.com',
         'abdelkrim  touche': 'kakouptt@gmail.com',
         'Samia  Aslouni':'samiamansouri16@gmail.com',
-        'Firas  Mohammed  Radhi':'frsrdh@gmail.com'
+        'Firas Mohammed Radhi':'frsrdh@gmail.com'
     }
     # driver_emails = {
     #     'AHMAD SEYAM  Afzali': 'kiduswork2@gmail.com',

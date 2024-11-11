@@ -16,6 +16,28 @@ def calculate_net_pay(driver_name: str, gross_pay: float, is_final_total: bool =
         return base_pay + 600 if is_final_total else base_pay  # Only add $600 to final total
     elif driver_name == "Bilal  Bouhssane":
         return gross_pay * 0.8  # 80% of income
+    elif driver_name == "Abdul  Latif  Hassani":
+        return gross_pay * 0.73
+    elif driver_name == "Chadi  Tebah":
+        return gross_pay * 0.73
+    elif driver_name == "Fatsah  Kennouche":
+        return gross_pay * 0.73
+    elif driver_name == "Ghulam  Sarwar Safi":
+        return gross_pay * 0.73
+    elif driver_name == "Inamullah  Hamraz":
+        return gross_pay * 0.73
+    elif driver_name == "LWABOSH B PUKA":
+        return gross_pay * 0.73
+    elif driver_name == "Mustapa  Quraishi":
+        return gross_pay * 0.73
+    elif driver_name == "Najibullah  Halimi":
+        return gross_pay * 0.73
+    elif driver_name == "Samuel  Suzi":
+        return gross_pay * 0.73
+    elif driver_name == "Sheraqa  Shoresh":
+        return gross_pay * 0.73
+    elif driver_name == "Tarun  Vachani":
+        return gross_pay * 0.73
     else:
         return gross_pay * 0.75  # Default 75% of income
 
@@ -113,8 +135,9 @@ def create_invoice_elements(driver_name, data):
             Paragraph("Days", styles["Normal"]),
             Paragraph("Run", styles["Normal"]),
             Paragraph("Miles", styles["Normal"]),
-            Paragraph("Net Pay", styles["Normal"]),
-            Paragraph("Average Price Per Mile", styles["Normal"])
+            Paragraph("Average Price Per Mile", styles["Normal"]),
+            Paragraph("Net Pay", styles["Normal"])
+            
         ],
         [
             Paragraph(driver_name, styles["Normal"]),
@@ -122,8 +145,8 @@ def create_invoice_elements(driver_name, data):
             str(active_days),
             str(len(data)),
             str(int(total_miles)),
-            f"${total_net:.2f}",
-            f"${avg_price:.2f}"
+            f"${avg_price:.2f}",
+            f"${total_net:.2f}"
         ]
     ]
     
@@ -140,7 +163,7 @@ def create_invoice_elements(driver_name, data):
         ('RIGHTPADDING', (0, 0), (-1, -1), 5),
     ])
     
-    summary_table = Table(summary_data, colWidths=[1.83*inch, 1.5*inch, 0.5*inch, 0.5*inch, 0.6*inch, 0.8*inch, 1.85*inch])
+    summary_table = Table(summary_data, colWidths=[1.83*inch, 1.5*inch, 0.5*inch, 0.5*inch, 0.6*inch, 1.8*inch,0.85*inch])
     summary_table.setStyle(summary_style)
     elements.append(summary_table)
     elements.append(Spacer(1, 20))
