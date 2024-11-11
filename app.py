@@ -161,7 +161,7 @@ def get_driver_email(driver_name):
         'Bilal  Bouhssane': 'jsbilal@gmail.com',
         'Billal  Djafri': 'djafribillal1993@gmail.com',
         'Chadi  Tebah': 'chaditeb2@gmail.com',
-        'Djebar  Kacimi': 'djebar83@gmail.com',
+        'Djebar  Kacimi': 'kiduswork2@gmail.com',
         'Fadila  Ahfir': 'fadilaahfirbw@gmail.com',
         'Fatsah  Kennouche ': 'kennouche.fatsah@gmail.com',
         'Fawad  Haidari': 'fawadhaidari91@gmail.com',
