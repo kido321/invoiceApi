@@ -1,3 +1,4 @@
+#pdf_generation
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib import colors
@@ -34,11 +35,11 @@ def calculate_net_pay(driver_name: str, gross_pay: float, is_final_total: bool =
         return gross_pay * 0.73
     elif driver_name == "Najibullah  Halimi":
         return gross_pay * 0.73
-    elif driver_name == "Samuel  Suzi":
+    elif driver_name == "Samuel Suzi":
         return gross_pay * 0.73
-    elif driver_name == "Sheraqa  Shoresh":
+    elif driver_name == "Sheraqa Shoresh":
         return gross_pay * 0.73
-    elif driver_name == "Tarun  Vachani":
+    elif driver_name == "Tarun Vachani":
         return gross_pay * 0.73
     else:
         return gross_pay * 0.75  # Default 75% of income
