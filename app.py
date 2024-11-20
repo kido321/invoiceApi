@@ -53,11 +53,10 @@ class AsyncEmailSender:
                 pdf_attachment.add_header('Content-Disposition', 'attachment', filename=f'{driver_name}-paystub.pdf')
                 msg.attach(pdf_attachment)
 
-                # Fixed SMTP connection with proper TLS handling
-                smtp = aiosmtplib.SMTP(hostname='smtp.gmail.com', port=587)
+                # Use start_tls=True to handle TLS negotiation automatically
+                smtp = aiosmtplib.SMTP(hostname='smtp.gmail.com', port=587, start_tls=True)
                 try:
                     await smtp.connect()
-                    await smtp.starttls()
                     await smtp.login(self.sender_email, self.sender_password)
                     await smtp.send_message(msg)
                 finally:
@@ -440,6 +439,158 @@ def process_excel():
 
 
 
+@app.route('/validate_emails/', methods=['POST'])
+def validate_emails():
+    try:
+        data = request.get_json()
+        pdfs = data.get('pdfs', {})
+        
+        if not pdfs:
+            return jsonify({'error': 'No PDFs provided'}), 400
+
+        # Fetch all drivers from Supabase
+        response = supabase.table('drivers').select('*').execute()
+        
+        # Create normalized dictionary for email lookup with debug info
+        drivers_db = {}
+        print("\n=== Loaded Driver Database ===")
+        for driver in response.data:
+            normalized_name = normalize_name(driver['name'])
+            drivers_db[normalized_name] = {
+                'email': driver['email'],
+                'original_name': driver['name'],
+                'pay_multiplier': driver['pay_multiplier']
+            }
+            print(f"✓ {driver['name']} -> {driver['email']} (multiplier: {driver['pay_multiplier']})")
+
+        # Validate mappings
+        email_mappings = []
+        not_found = []
+        found = []
+
+        print("\n=== Checking PDF Driver Mappings ===")
+        for driver_name in pdfs.keys():
+            normalized_name = normalize_name(driver_name)
+            driver_info = drivers_db.get(normalized_name)
+            
+            mapping_status = {
+                'original_name': driver_name,
+                'normalized_name': normalized_name,
+            }
+
+            if driver_info:
+                mapping_status.update({
+                    'email': driver_info['email'],
+                    'pay_multiplier': driver_info['pay_multiplier'],
+                    'status': 'found'
+                })
+                found.append(mapping_status)
+                print(f"✓ Found: {driver_name} -> {driver_info['email']}")
+            else:
+                mapping_status.update({
+                    'status': 'not_found',
+                    'error': 'No matching driver in database'
+                })
+                not_found.append(mapping_status)
+                print(f"✗ Not Found: {driver_name}")
+
+        # Print summary statistics
+        print("\n=== Validation Summary ===")
+        print(f"Total drivers in database: {len(drivers_db)}")
+        print(f"Total PDFs to process: {len(pdfs)}")
+        print(f"Matched drivers: {len(found)}")
+        print(f"Unmatched drivers: {len(not_found)}")
+
+        # Print detailed unmatched drivers if any
+        if not_found:
+            print("\n=== Unmatched Drivers ===")
+            print("The following drivers from the Excel file were not found in the database:")
+            for driver in not_found:
+                print(f"- {driver['original_name']} (normalized: {driver['normalized_name']})")
+            
+            print("\nPossible matches in database:")
+            for unmatched in not_found:
+                normalized_unmatched = unmatched['normalized_name'].lower()
+                possible_matches = [
+                    f"{name} -> {info['email']}"
+                    for name, info in drivers_db.items()
+                    if normalized_unmatched in name.lower() or name.lower() in normalized_unmatched
+                ]
+                if possible_matches:
+                    print(f"\nPossible matches for {unmatched['original_name']}:")
+                    for match in possible_matches:
+                        print(f"  - {match}")
+
+        # Detailed validation response
+        validation_response = {
+            'summary': {
+                'total_pdfs': len(pdfs),
+                'total_drivers_in_db': len(drivers_db),
+                'matched_drivers': len(found),
+                'unmatched_drivers': len(not_found)
+            },
+            'matched_drivers': found,
+            'unmatched_drivers': not_found,
+            'ready_to_send': len(not_found) == 0
+        }
+
+        return jsonify(validation_response), 200
+
+    except Exception as e:
+        print(f"Error in validate_emails: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'error': f'An error occurred while validating emails: {str(e)}'
+        }), 500
+
+
+def process_data(df):
+    # Convert DATE column to datetime
+    df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+
+    numeric_columns = ["GROSS PAY", "DEDUCTION", "SPIFF", "NET PAY", "MILES"]
+    
+    # Clean and convert numeric columns
+    def clean_numeric(series):
+        # Convert to string first, then clean
+        series = series.astype(str)
+        series = series.replace('[\$,]', '', regex=True)
+        return pd.to_numeric(series, errors='coerce')
+
+    # Process numeric columns
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = clean_numeric(df[col])
+            df[col] = df[col].fillna(0)
+
+    # Debug print
+    print("\nProcessed DataFrame Info:")
+    print(df.info())
+    print("\nSample of processed data:")
+    print(df.head())
+    
+    return df
+
+
+if __name__ == '__main__': # For compatibility across platforms
+    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
+
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
 
 
 
@@ -654,144 +805,3 @@ def process_excel():
 #         return jsonify({'error': f'An error occurred while sending emails: {str(e)}'}), 500
 
 
-
-
-
-
-@app.route('/validate_emails/', methods=['POST'])
-def validate_emails():
-    try:
-        data = request.get_json()
-        pdfs = data.get('pdfs', {})
-        
-        if not pdfs:
-            return jsonify({'error': 'No PDFs provided'}), 400
-
-        # Fetch all drivers from Supabase
-        response = supabase.table('drivers').select('*').execute()
-        
-        # Create normalized dictionary for email lookup with debug info
-        drivers_db = {}
-        print("\n=== Loaded Driver Database ===")
-        for driver in response.data:
-            normalized_name = normalize_name(driver['name'])
-            drivers_db[normalized_name] = {
-                'email': driver['email'],
-                'original_name': driver['name'],
-                'pay_multiplier': driver['pay_multiplier']
-            }
-            print(f"✓ {driver['name']} -> {driver['email']} (multiplier: {driver['pay_multiplier']})")
-
-        # Validate mappings
-        email_mappings = []
-        not_found = []
-        found = []
-
-        print("\n=== Checking PDF Driver Mappings ===")
-        for driver_name in pdfs.keys():
-            normalized_name = normalize_name(driver_name)
-            driver_info = drivers_db.get(normalized_name)
-            
-            mapping_status = {
-                'original_name': driver_name,
-                'normalized_name': normalized_name,
-            }
-
-            if driver_info:
-                mapping_status.update({
-                    'email': driver_info['email'],
-                    'pay_multiplier': driver_info['pay_multiplier'],
-                    'status': 'found'
-                })
-                found.append(mapping_status)
-                print(f"✓ Found: {driver_name} -> {driver_info['email']}")
-            else:
-                mapping_status.update({
-                    'status': 'not_found',
-                    'error': 'No matching driver in database'
-                })
-                not_found.append(mapping_status)
-                print(f"✗ Not Found: {driver_name}")
-
-        # Print summary statistics
-        print("\n=== Validation Summary ===")
-        print(f"Total drivers in database: {len(drivers_db)}")
-        print(f"Total PDFs to process: {len(pdfs)}")
-        print(f"Matched drivers: {len(found)}")
-        print(f"Unmatched drivers: {len(not_found)}")
-
-        # Print detailed unmatched drivers if any
-        if not_found:
-            print("\n=== Unmatched Drivers ===")
-            print("The following drivers from the Excel file were not found in the database:")
-            for driver in not_found:
-                print(f"- {driver['original_name']} (normalized: {driver['normalized_name']})")
-            
-            print("\nPossible matches in database:")
-            for unmatched in not_found:
-                normalized_unmatched = unmatched['normalized_name'].lower()
-                possible_matches = [
-                    f"{name} -> {info['email']}"
-                    for name, info in drivers_db.items()
-                    if normalized_unmatched in name.lower() or name.lower() in normalized_unmatched
-                ]
-                if possible_matches:
-                    print(f"\nPossible matches for {unmatched['original_name']}:")
-                    for match in possible_matches:
-                        print(f"  - {match}")
-
-        # Detailed validation response
-        validation_response = {
-            'summary': {
-                'total_pdfs': len(pdfs),
-                'total_drivers_in_db': len(drivers_db),
-                'matched_drivers': len(found),
-                'unmatched_drivers': len(not_found)
-            },
-            'matched_drivers': found,
-            'unmatched_drivers': not_found,
-            'ready_to_send': len(not_found) == 0
-        }
-
-        return jsonify(validation_response), 200
-
-    except Exception as e:
-        print(f"Error in validate_emails: {e}")
-        traceback.print_exc()
-        return jsonify({
-            'error': f'An error occurred while validating emails: {str(e)}'
-        }), 500
-
-
-def process_data(df):
-    # Convert DATE column to datetime
-    df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
-
-    numeric_columns = ["GROSS PAY", "DEDUCTION", "SPIFF", "NET PAY", "MILES"]
-    
-    # Clean and convert numeric columns
-    def clean_numeric(series):
-        # Convert to string first, then clean
-        series = series.astype(str)
-        series = series.replace('[\$,]', '', regex=True)
-        return pd.to_numeric(series, errors='coerce')
-
-    # Process numeric columns
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = clean_numeric(df[col])
-            df[col] = df[col].fillna(0)
-
-    # Debug print
-    print("\nProcessed DataFrame Info:")
-    print(df.info())
-    print("\nSample of processed data:")
-    print(df.head())
-    
-    return df
-
-
-if __name__ == '__main__': # For compatibility across platforms
-    app.run(debug=True)
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
