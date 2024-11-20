@@ -11,6 +11,7 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
+from supabase import create_client, Client
 
 app = Flask(__name__)
 # CORS(app, resources={r"/process_csv/*": {"origins": "http://localhost:3000"}})
@@ -18,7 +19,10 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load environment variables (you can keep this if you have other env variables)
 # load_dotenv()
-
+supabase: Client = create_client(
+    os.environ.get('SUPABASE_URL'),
+    os.environ.get('SUPABASE_KEY')
+)
 
 
 # print(DATABASE_URL)
@@ -30,6 +34,32 @@ def hello():
 def favicon():
     return '', 204
 
+def normalize_name(name) -> str:
+    """
+    Normalize a name by:
+    1. Converting to string
+    2. Converting to title case
+    3. Removing extra spaces
+    4. Removing trailing/leading spaces
+    """
+    try:
+        # Convert input to string, handling various types
+        if name is None:
+            return ""
+        # Convert to string, handling float/int cases
+        if isinstance(name, (float, int)):
+            name = str(int(name))
+        else:
+            name = str(name)
+        
+        # Remove extra spaces and trim
+        normalized = " ".join(name.split())
+        
+        print(f"Normalized name: '{name}' -> '{normalized}'")  # Debugging
+        return normalized
+    except Exception as e:
+        print(f"Error normalizing name '{name}' (type: {type(name)}): {str(e)}")
+        return str(name)
 
 @app.route('/process_excel/', methods=['POST'])
 def process_excel():
@@ -37,183 +67,367 @@ def process_excel():
         file = request.files['file']
         if not file:
             return jsonify({'error': 'No file provided'}), 400
+        
+        # Fetch drivers from Supabase with their pay multipliers
+        response = supabase.table('drivers').select('*').execute()
+        
+        # Create a normalized dictionary for driver lookup with debug logging
+        drivers = {}
+        for driver in response.data:
+            original_name = driver['name']
+            normalized_name = normalize_name(original_name)
+            drivers[normalized_name] = {
+                'email': driver['email'],
+                'pay_multiplier': float(driver['pay_multiplier']),
+                'original_name': original_name
+            }
+            print(f"Loaded driver: '{original_name}' -> '{normalized_name}'")
 
-        # Read file contents into memory
         file_contents = file.read()
         excel_file = BytesIO(file_contents)
 
-        # Optionally, reset file pointer
-        # file.seek(0)
-
-        # Read the second sheet from the Excel file
         try:
-            df = pd.read_excel(excel_file, sheet_name=1, dtype={"DRIVER NAME": str}, engine='openpyxl')
+            # Read Excel file with explicit string type for DRIVER NAME
+            df = pd.read_excel(
+                excel_file, 
+                sheet_name=1, 
+                dtype={"DRIVER NAME": str},
+                engine='openpyxl'
+            )
+            
+            # Debug print column types
+            print("DataFrame column types:", df.dtypes)
+            print("Sample of DRIVER NAME column:", df["DRIVER NAME"].head())
+            
         except Exception as e:
             print(f"Error reading Excel file: {e}")
             return jsonify({'error': f'Error reading Excel file: {str(e)}'}), 500
 
-         # For debugging purposes
-
-        # Proceed with data processing
+        # Normalize the DRIVER NAME column with error handling
+        df['DRIVER NAME'] = df['DRIVER NAME'].apply(lambda x: normalize_name(x))
+        
+        # Debug print unique driver names
+        print("Unique driver names in Excel:", df['DRIVER NAME'].unique())
+        
         df = process_data(df)
-
-        # Remove rows where DRIVER NAME is missing
         df = df[df["DRIVER NAME"].notna()]
-
-        # Group data by DRIVER NAME
         grouped_data = df.groupby("DRIVER NAME")
 
         driver_pdfs = {}
+        unmatched_drivers = []
+        processed_drivers = []
 
         for driver_name, group in grouped_data:
-            # Generate PDF invoice
-            print(driver_name)
-            pdf_buffer = generate_invoice(driver_name, group)
-            # Encode PDF to base64 string for transmission
-            pdf_base64 = base64.b64encode(pdf_buffer).decode('utf-8')
-            driver_pdfs[driver_name] = pdf_base64
+            normalized_name = normalize_name(driver_name)
+            print(f"Processing group for driver: '{driver_name}' (normalized: '{normalized_name}')")
+            
+            # Get driver info with default pay multiplier if not found
+            driver_info = drivers.get(normalized_name, {
+                'pay_multiplier': 0.75,
+                'email': None,
+                'original_name': driver_name
+            })
+            
+            pay_multiplier = float(driver_info['pay_multiplier'])
+            
+            if normalized_name not in drivers:
+                unmatched_drivers.append({
+                    'name': driver_name,
+                    'normalized_name': normalized_name
+                })
+                print(f"Warning: No matching driver found for '{driver_name}' (normalized: '{normalized_name}')")
+            else:
+                processed_drivers.append({
+                    'name': driver_name,
+                    'normalized_name': normalized_name,
+                    'pay_multiplier': pay_multiplier
+                })
+            
+            try:
+                # Generate PDF with pay multiplier
+                pdf_buffer = generate_invoice(driver_name, group, pay_multiplier)
+                pdf_base64 = base64.b64encode(pdf_buffer).decode('utf-8')
+                driver_pdfs[driver_name] = pdf_base64
+            except Exception as e:
+                print(f"Error generating PDF for {driver_name}: {e}")
+                continue
 
-        return jsonify({'message': 'PDFs generated successfully.', 'pdfs': driver_pdfs}), 200
+        # Print summary
+        print("\nProcessing Summary:")
+        print(f"Total drivers processed: {len(processed_drivers)}")
+        print(f"Unmatched drivers: {len(unmatched_drivers)}")
+        
+        if unmatched_drivers:
+            print("\nUnmatched drivers details:")
+            for driver in unmatched_drivers:
+                print(f"- {driver['name']} (normalized: {driver['normalized_name']})")
+
+        return jsonify({
+            'message': 'PDFs generated successfully.',
+            'pdfs': driver_pdfs,
+            'unmatched_drivers': unmatched_drivers,
+            'processed_drivers': processed_drivers
+        }), 200
 
     except Exception as e:
         print(f"General error: {e}")
+        traceback.print_exc()  # Print full traceback for debugging
         return jsonify({'error': f'An error occurred while processing the Excel file: {str(e)}'}), 500
-
-
-
 
 @app.route('/send_email/', methods=['POST'])
 def send_email_route():
     try:
         data = request.get_json()
         pdfs = data.get('pdfs')
-        # print(pdfs)
         if not pdfs:
             return jsonify({'error': 'No PDFs provided'}), 400
 
-        # Iterate over the PDFs and send emails
-        for driver_name, pdf_base64 in pdfs.items():
-            pdf_buffer = base64.b64decode(pdf_base64)
-            send_email(driver_name, pdf_buffer)
+        # Fetch all drivers from Supabase
+        response = supabase.table('drivers').select('*').execute()
+        
+        # Create normalized dictionary for email lookup with debug info
+        drivers_db = {}
+        for driver in response.data:
+            normalized_name = normalize_name(driver['name'])
+            drivers_db[normalized_name] = {
+                'email': driver['email'],
+                'original_name': driver['name']
+            }
+            print(f"Loaded driver email mapping: '{driver['name']}' -> '{driver['email']}'")
 
-        return jsonify({'message': 'Emails sent successfully.'}), 200
+        emails_sent = []
+        failed_emails = []
+        not_found_drivers = []
+        email_mapping = []
+
+        print("\n=== Starting Email Processing ===")
+        print(f"Total PDFs to process: {len(pdfs)}")
+        print("Checking email mappings...")
+
+        # First, check all mappings
+        for driver_name in pdfs.keys():
+            normalized_name = normalize_name(driver_name)
+            driver_info = drivers_db.get(normalized_name)
+            
+            mapping_info = {
+                'original_name': driver_name,
+                'normalized_name': normalized_name
+            }
+
+            if driver_info:
+                mapping_info['email'] = driver_info['email']
+                mapping_info['status'] = 'found'
+                email_mapping.append(mapping_info)
+            else:
+                mapping_info['status'] = 'not_found'
+                not_found_drivers.append(driver_name)
+                email_mapping.append(mapping_info)
+
+        # Print mapping summary
+        print("\n=== Email Mapping Summary ===")
+        print(f"Total drivers in database: {len(drivers_db)}")
+        print(f"Total PDFs to send: {len(pdfs)}")
+        print(f"Drivers with email mappings: {len(email_mapping) - len(not_found_drivers)}")
+        print(f"Drivers without email mappings: {len(not_found_drivers)}")
+
+        if not_found_drivers:
+            print("\nDrivers without email mappings:")
+            for driver in not_found_drivers:
+                print(f"- {driver}")
+        
+        # Only proceed if all drivers have email mappings
+        if not_found_drivers:
+            return jsonify({
+                'error': 'Some drivers do not have email mappings',
+                'not_found_drivers': not_found_drivers,
+                'email_mapping': email_mapping
+            }), 400
+
+        print("\n=== Starting Email Sending ===")
+        # Send emails if all mappings are found
+        for driver_name, pdf_base64 in pdfs.items():
+            normalized_name = normalize_name(driver_name)
+            driver_info = drivers_db.get(normalized_name)
+            
+            if driver_info:  # This check should always pass since we validated above
+                try:
+                    print(f"Sending email to {driver_name} ({driver_info['email']})")
+                    pdf_buffer = base64.b64decode(pdf_base64)
+                    send_email(driver_name, driver_info['email'], pdf_buffer)
+                    emails_sent.append({
+                        'name': driver_name,
+                        'email': driver_info['email'],
+                        'status': 'sent'
+                    })
+                    print(f"✓ Successfully sent email to {driver_name}")
+                except Exception as e:
+                    error_msg = str(e)
+                    failed_emails.append({
+                        'name': driver_name,
+                        'email': driver_info['email'],
+                        'error': error_msg
+                    })
+                    print(f"✗ Failed to send email to {driver_name}: {error_msg}")
+
+        # Print final summary
+        print("\n=== Email Sending Summary ===")
+        print(f"Successfully sent: {len(emails_sent)}")
+        print(f"Failed to send: {len(failed_emails)}")
+
+        if failed_emails:
+            print("\nFailed emails:")
+            for fail in failed_emails:
+                print(f"- {fail['name']} ({fail['email']}): {fail['error']}")
+
+        return jsonify({
+            'message': 'Email process completed',
+            'summary': {
+                'total_pdfs': len(pdfs),
+                'emails_sent': len(emails_sent),
+                'emails_failed': len(failed_emails)
+            },
+            'emails_sent': emails_sent,
+            'failed_emails': failed_emails,
+            'email_mapping': email_mapping
+        }), 200
 
     except Exception as e:
         print(f"Error in send_email_route: {e}")
+        traceback.print_exc()  # Print full traceback for debugging
         return jsonify({'error': f'An error occurred while sending emails: {str(e)}'}), 500
 
-def send_email(driver_name, pdf_buffer):
+@app.route('/validate_emails/', methods=['POST'])
+def validate_emails():
     try:
-        # Define email parameters
-        # print(driver_name)
-        sender_email = os.environ.get('SENDER_EMAIL')
-        sender_password = os.environ.get('SENDER_PASSWORD')
-        recipient_email = get_driver_email(driver_name)  # Implement this function
-        subject = f'Paystub for {driver_name}'
-        body = f'Dear {driver_name},\n\nPlease find attached your paystub.\n\nBest regards,\nGiant Transport Group LLC'
-        print(driver_name)
-        if not recipient_email:
-            print(f"No email address found for {driver_name}. Skipping.")
-            return
-
-        # Create the email message
-        msg = MIMEMultipart()
-        msg['From'] = sender_email
-        msg['To'] = recipient_email
-        msg['Subject'] = subject
-
-        # Attach the body text
-        msg.attach(MIMEText(body, 'plain'))
-
-        # Attach the PDF
-        pdf_attachment = MIMEApplication(pdf_buffer, _subtype='pdf')
-        pdf_attachment.add_header('Content-Disposition', 'attachment', filename=f'{driver_name}-paystub.pdf')
-        msg.attach(pdf_attachment)
+        data = request.get_json()
+        pdfs = data.get('pdfs', {})
         
-        # Send the email via SMTP
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.send_message(msg)
+        if not pdfs:
+            return jsonify({'error': 'No PDFs provided'}), 400
 
-        print(f"Email sent to {recipient_email} for {driver_name}")
+        # Fetch all drivers from Supabase
+        response = supabase.table('drivers').select('*').execute()
+        
+        # Create normalized dictionary for email lookup with debug info
+        drivers_db = {}
+        print("\n=== Loaded Driver Database ===")
+        for driver in response.data:
+            normalized_name = normalize_name(driver['name'])
+            drivers_db[normalized_name] = {
+                'email': driver['email'],
+                'original_name': driver['name'],
+                'pay_multiplier': driver['pay_multiplier']
+            }
+            print(f"✓ {driver['name']} -> {driver['email']} (multiplier: {driver['pay_multiplier']})")
+
+        # Validate mappings
+        email_mappings = []
+        not_found = []
+        found = []
+
+        print("\n=== Checking PDF Driver Mappings ===")
+        for driver_name in pdfs.keys():
+            normalized_name = normalize_name(driver_name)
+            driver_info = drivers_db.get(normalized_name)
+            
+            mapping_status = {
+                'original_name': driver_name,
+                'normalized_name': normalized_name,
+            }
+
+            if driver_info:
+                mapping_status.update({
+                    'email': driver_info['email'],
+                    'pay_multiplier': driver_info['pay_multiplier'],
+                    'status': 'found'
+                })
+                found.append(mapping_status)
+                print(f"✓ Found: {driver_name} -> {driver_info['email']}")
+            else:
+                mapping_status.update({
+                    'status': 'not_found',
+                    'error': 'No matching driver in database'
+                })
+                not_found.append(mapping_status)
+                print(f"✗ Not Found: {driver_name}")
+
+        # Print summary statistics
+        print("\n=== Validation Summary ===")
+        print(f"Total drivers in database: {len(drivers_db)}")
+        print(f"Total PDFs to process: {len(pdfs)}")
+        print(f"Matched drivers: {len(found)}")
+        print(f"Unmatched drivers: {len(not_found)}")
+
+        # Print detailed unmatched drivers if any
+        if not_found:
+            print("\n=== Unmatched Drivers ===")
+            print("The following drivers from the Excel file were not found in the database:")
+            for driver in not_found:
+                print(f"- {driver['original_name']} (normalized: {driver['normalized_name']})")
+            
+            print("\nPossible matches in database:")
+            for unmatched in not_found:
+                normalized_unmatched = unmatched['normalized_name'].lower()
+                possible_matches = [
+                    f"{name} -> {info['email']}"
+                    for name, info in drivers_db.items()
+                    if normalized_unmatched in name.lower() or name.lower() in normalized_unmatched
+                ]
+                if possible_matches:
+                    print(f"\nPossible matches for {unmatched['original_name']}:")
+                    for match in possible_matches:
+                        print(f"  - {match}")
+
+        # Detailed validation response
+        validation_response = {
+            'summary': {
+                'total_pdfs': len(pdfs),
+                'total_drivers_in_db': len(drivers_db),
+                'matched_drivers': len(found),
+                'unmatched_drivers': len(not_found)
+            },
+            'matched_drivers': found,
+            'unmatched_drivers': not_found,
+            'ready_to_send': len(not_found) == 0
+        }
+
+        return jsonify(validation_response), 200
 
     except Exception as e:
-        print(f'Error sending email to {driver_name}: {e}')
-        # Handle the error as needed
-
-def get_driver_email(driver_name):
-    # Implement logic to retrieve the driver's email address
-    normalized_name = ' '.join(driver_name.split())
-    driver_emails = {
-        'AHMAD SEYAM  Afzali': 'seyamom47@gmail.com',
-        'Abdu lhai  Abdul qaiyum Abdul Qaiyum': 'abdulhai.abdulqaiyum1984@gmail.com',
-        'Abdul Latif Hassani': 'abdulabdullatifhasani75@gmail.com',
-        'Adel  Amghar': 'adelamghar2022@gmail.com',
-        'Adel  Benidiri': 'adelpitbenidiri@gmail.com',
-        'Ahcene  Hamaoui': 'Hamahcene532@gmail.com',
-        'Ahmad Ferdaws  Ayar': 'ayarferdaws@gmail.com',
-        'Alaa K Ali': 'alaaamar198577@gmail.com',
-        'Ali  Arghash': 'arsalan.asghar@yahoo.com',
-        'Amel  Amriou': 'amriouamel1999@gmail.com',
-        'Atiqullah  Alimi': 'atiq.alimi2021@gmail.com',
-        'Azzedine  Boumeraou': 'azzedine06boumeraou@gmail.com',
-        'Baryali  Hamidi': 'hamidibaryalai209@gmail.com',
-        'Bilal  Bouhssane': 'jsbilal@gmail.com',
-        'Billal  Djafri': 'djafribillal1993@gmail.com',
-        'Chadi  Tebah': 'chaditeb2@gmail.com',
-        'Djebar Kacimi  ': 'kiduswork2@gmail.com',
-        'Fadila  Ahfir': 'fadilaahfirbw@gmail.com',
-        'Fatsah  Kennouche ': 'kennouche.fatsah@gmail.com',
-        'Fawad  Haidari': 'fawadhaidari91@gmail.com',
-        'Ghulam  Sarwar Safi': 'ghulamsarwarsafi0@gmail.com',
-        'Harsh  Vachani': 'harshvachhani05@gmail.com',
-        'Inamullah  Hamraz': 'inamullahhamraz@gmail.com',
-        'Juba  Messali': 'messaliyouba2@gmail.com',
-        'LWABOSH B PUKA': 'pukalwaboshi@gmail.com',
-        'Loucif  Bechiti': 'loucif2011@live.fr',
-        'Mustapa  Quraishi': 'mustafahaji160@gmail.com',
-        'Naim  Ayad': 'naimayad38@gmail.com',
-        'Naima  Zabi': 'Nzabi@uapschool.org',
-        'Najibullah  Halimi': 'najibullahhalimi3@gmail.com',
-        'Noor  Haidary': 'ra_ml2001@yahoo.com',
-        'Rasool Ismael Munshid': 'ra_ml2001@yahoo.com',
-        'Rouzbeh  Shure': 'rouzbeh.shure@gmail.com',
-        'Said   Bouza': 'bouzasaid4@gmail.com',
-        'Salahuddin  Neromand': 's.neromand@gmail.com',
-        'Saliha  Mammeri': 'bouzasaliha21@gmail.com',
-        'Samuel  Suzi': 'samelsuzi@gmail.com',
-        'Sheraqa  Shoresh': 'Shorishshiraqa@gmail.com',
-        'Tarun  Vachani': 'tarunvachani@gmail.com',
-        'Walid  Boukhanouf': 'boukhanoufwalid@gmail.com',
-        'abdelkrim  touche': 'kakouptt@gmail.com',
-        'Samia  Aslouni':'samiamansouri16@gmail.com',
-        'Firas Mohammed Radhi':'frsrdh@gmail.com'
-    }
-    normalized_emails = {' '.join(k.split()): v for k, v in driver_emails.items()}
-    # driver_emails = {
-    #     'AHMAD SEYAM  Afzali': 'kiduswork2@gmail.com',
-    #     'Abdu lhai  Abdul qaiyum Abdul Qaiyum': 'kiduswork2@gmail.com',
-    # }
-    return normalized_emails.get(normalized_name)
-
+        print(f"Error in validate_emails: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'error': f'An error occurred while validating emails: {str(e)}'
+        }), 500
 
 
 def process_data(df):
-    # Implement your data processing and cleaning logic
+    # Convert DATE column to datetime
     df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
 
     numeric_columns = ["GROSS PAY", "DEDUCTION", "SPIFF", "NET PAY", "MILES"]
-
+    
     # Clean and convert numeric columns
     def clean_numeric(series):
+        # Convert to string first, then clean
+        series = series.astype(str)
         series = series.replace('[\$,]', '', regex=True)
         return pd.to_numeric(series, errors='coerce')
 
-    df[numeric_columns] = df[numeric_columns].apply(clean_numeric)
-    df[numeric_columns] = df[numeric_columns].fillna(0)
+    # Process numeric columns
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = clean_numeric(df[col])
+            df[col] = df[col].fillna(0)
 
+    # Debug print
+    print("\nProcessed DataFrame Info:")
+    print(df.info())
+    print("\nSample of processed data:")
+    print(df.head())
+    
     return df
+
 
 if __name__ == '__main__': # For compatibility across platforms
     app.run(debug=True)

@@ -8,47 +8,56 @@ from io import BytesIO
 import os
 import pandas as pd
 
-def calculate_net_pay(driver_name: str, gross_pay: float, is_final_total: bool = False) -> float:
-    """Calculate net pay based on driver-specific rules"""
-    if driver_name == "Azzedine  Boumeraou":
-        return gross_pay  # 100% of income
-    elif driver_name == "Djebar  Kacimi":
-        base_pay = gross_pay  # Regular calculation for individual rows
-        return base_pay + 600 if is_final_total else base_pay  # Only add $600 to final total
-    elif driver_name == "Bilal  Bouhssane":
-        return gross_pay * 0.8  # 80% of income
-    elif driver_name == "Abdul Latif Hassani":
-        print(gross_pay, 'gross_pay' , driver_name)
-        return gross_pay * 0.73
-    elif driver_name == "Chadi  Tebah":
-        return gross_pay * 0.73
-    elif driver_name == "Fatsah  Kennouche ":
-        print(gross_pay, 'gross_pay')
-        return gross_pay * 0.73
-    elif driver_name == "Ghulam  Sarwar Safi":
-        return gross_pay * 0.73
-    elif driver_name == "Inamullah  Hamraz":
-        return gross_pay * 0.73
-    elif driver_name == "LWABOSH B PUKA":
-        return gross_pay * 0.73
-    elif driver_name == "Mustapa  Quraishi":
-        return gross_pay * 0.73
-    elif driver_name == "Najibullah  Halimi":
-        return gross_pay * 0.73
-    elif driver_name == "Samuel Suzi":
-        return gross_pay * 0.73
-    elif driver_name == "Sheraqa Shoresh":
-        return gross_pay * 0.73
-    elif driver_name == "Tarun Vachani":
-        return gross_pay * 0.73
-    else:
-        return gross_pay * 0.75  # Default 75% of income
+
+
+
+def calculate_net_pay(driver_name: str, gross_pay: float, pay_multiplier: float, is_final_total: bool = False) -> float:
+    """Calculate net pay using the pay multiplier from Supabase"""
+    # Special case for Djebar Kacimi's bonus
+    if driver_name == "Djebar Kacimi" and is_final_total:
+        return (gross_pay * pay_multiplier) + 600
+    return gross_pay * pay_multiplier
+# def calculate_net_pay(driver_name: str, gross_pay: float, is_final_total: bool = False) -> float:
+#     """Calculate net pay based on driver-specific rules"""
+#     if driver_name == "Azzedine  Boumeraou":
+#         return gross_pay  # 100% of income
+#     elif driver_name == "Djebar  Kacimi":
+#         base_pay = gross_pay  # Regular calculation for individual rows
+#         return base_pay + 600 if is_final_total else base_pay  # Only add $600 to final total
+#     elif driver_name == "Bilal  Bouhssane":
+#         return gross_pay * 0.8  # 80% of income
+#     elif driver_name == "Abdul Latif Hassani":
+#         print(gross_pay, 'gross_pay' , driver_name)
+#         return gross_pay * 0.73
+#     elif driver_name == "Chadi  Tebah":
+#         return gross_pay * 0.73
+#     elif driver_name == "Fatsah  Kennouche ":
+#         print(gross_pay, 'gross_pay')
+#         return gross_pay * 0.73
+#     elif driver_name == "Ghulam  Sarwar Safi":
+#         return gross_pay * 0.73
+#     elif driver_name == "Inamullah  Hamraz":
+#         return gross_pay * 0.73
+#     elif driver_name == "LWABOSH B PUKA":
+#         return gross_pay * 0.73
+#     elif driver_name == "Mustapa  Quraishi":
+#         return gross_pay * 0.73
+#     elif driver_name == "Najibullah  Halimi":
+#         return gross_pay * 0.73
+#     elif driver_name == "Samuel Suzi":
+#         return gross_pay * 0.73
+#     elif driver_name == "Sheraqa Shoresh":
+#         return gross_pay * 0.73
+#     elif driver_name == "Tarun Vachani":
+#         return gross_pay * 0.73
+#     else:
+#         return gross_pay * 0.75  # Default 75% of income
 
 def create_paragraph_cell(text, style_name="Normal"):
     styles = getSampleStyleSheet()
     return Paragraph(text, styles[style_name])
 
-def generate_invoice(driver_name, data):
+def generate_invoice(driver_name, data, pay_multiplier=0.75):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -58,15 +67,21 @@ def generate_invoice(driver_name, data):
         topMargin=30,
         bottomMargin=18,
     )
-    elements = create_invoice_elements(driver_name, data)
+    elements = create_invoice_elements(driver_name, data, pay_multiplier)
     doc.build(elements)
     pdf_value = buffer.getvalue()
     buffer.close()
     return pdf_value
+def calculate_net_pay(driver_name: str, gross_pay: float, pay_multiplier: float, is_final_total: bool = False) -> float:
+    """Calculate net pay using the pay multiplier"""
+    # Special case for Djebar Kacimi's bonus
+    if driver_name == "Djebar Kacimi" and is_final_total:
+        return (gross_pay * pay_multiplier) + 600
+    return gross_pay * pay_multiplier
 
-def create_invoice_elements(driver_name, data):
+def create_invoice_elements(driver_name, data, pay_multiplier):
     elements = []
-    
+
     # Define colors
     header_blue = colors.HexColor('#B8CCE4')
     row_green = colors.HexColor('#6AA84F')
@@ -122,7 +137,7 @@ def create_invoice_elements(driver_name, data):
     
     # Calculate total net pay and average price per mile for summary
     total_gross = data['GROSS PAY'].sum()
-    total_net = calculate_net_pay(driver_name, total_gross, is_final_total=True)
+    total_net = calculate_net_pay(driver_name, total_gross, pay_multiplier, is_final_total=True)
     total_miles = data['MILES'].sum()
     avg_price = total_gross / total_miles if total_miles > 0 else 0
     
@@ -194,7 +209,7 @@ def create_invoice_elements(driver_name, data):
     regular_total_net = 0
     
     for _, row in grouped_data.iterrows():
-        net_pay = calculate_net_pay(driver_name, row['GROSS PAY'], is_final_total=False)
+        net_pay = calculate_net_pay(driver_name, row['GROSS PAY'], pay_multiplier, is_final_total=False)
         regular_total_net += net_pay
         running_total_miles += row['MILES']
         
@@ -205,7 +220,6 @@ def create_invoice_elements(driver_name, data):
             str(int(row['MILES'])),
             f"${net_pay:.2f}"
         ])
-    
     # Add empty row
     details_data.append([""] * 5)
     
