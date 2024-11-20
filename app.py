@@ -61,6 +61,38 @@ def normalize_name(name) -> str:
         print(f"Error normalizing name '{name}' (type: {type(name)}): {str(e)}")
         return str(name)
 
+def send_email(driver_name, recipient_email, pdf_buffer):
+    """Send email with PDF attachment to driver"""
+    try:
+        sender_email = os.environ.get('SENDER_EMAIL')
+        sender_password = os.environ.get('SENDER_PASSWORD')
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = recipient_email
+        msg['Subject'] = f'Paystub for {driver_name}'
+        
+        body = f'Dear {driver_name},\n\nPlease find attached your paystub.\n\nBest regards,\nGiant Transport Group LLC'
+        msg.attach(MIMEText(body, 'plain'))
+
+        pdf_attachment = MIMEApplication(pdf_buffer, _subtype='pdf')
+        pdf_attachment.add_header('Content-Disposition', 'attachment', filename=f'{driver_name}-paystub.pdf')
+        msg.attach(pdf_attachment)
+        
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.send_message(msg)
+            
+        return True
+    except Exception as e:
+        raise Exception(f"Failed to send email: {str(e)}")
+
+
+
+
+
+
 @app.route('/process_excel/', methods=['POST'])
 def process_excel():
     try:
@@ -173,6 +205,17 @@ def process_excel():
         print(f"General error: {e}")
         traceback.print_exc()  # Print full traceback for debugging
         return jsonify({'error': f'An error occurred while processing the Excel file: {str(e)}'}), 500
+
+
+
+
+
+
+
+
+
+
+
 
 @app.route('/send_email/', methods=['POST'])
 def send_email_route():
@@ -295,6 +338,14 @@ def send_email_route():
         print(f"Error in send_email_route: {e}")
         traceback.print_exc()  # Print full traceback for debugging
         return jsonify({'error': f'An error occurred while sending emails: {str(e)}'}), 500
+
+
+
+
+
+
+
+
 
 @app.route('/validate_emails/', methods=['POST'])
 def validate_emails():
