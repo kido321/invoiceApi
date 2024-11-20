@@ -53,12 +53,18 @@ class AsyncEmailSender:
                 pdf_attachment.add_header('Content-Disposition', 'attachment', filename=f'{driver_name}-paystub.pdf')
                 msg.attach(pdf_attachment)
 
-                smtp = aiosmtplib.SMTP(hostname='smtp.gmail.com', port=587, use_tls=False)
-                await smtp.connect()
-                await smtp.starttls()
-                await smtp.login(self.sender_email, self.sender_password)
-                await smtp.send_message(msg)
-                await smtp.quit()
+                # Fixed SMTP connection with proper TLS handling
+                smtp = aiosmtplib.SMTP(hostname='smtp.gmail.com', port=587)
+                try:
+                    await smtp.connect()
+                    await smtp.starttls()
+                    await smtp.login(self.sender_email, self.sender_password)
+                    await smtp.send_message(msg)
+                finally:
+                    try:
+                        await smtp.quit()
+                    except:
+                        pass
 
                 print(f"✓ Successfully sent email to {driver_name} ({recipient_email})")
                 return {
@@ -81,31 +87,53 @@ class AsyncEmailSender:
         print(f"\n=== Starting Batch Email Processing ===")
         print(f"Total emails to send: {len(email_tasks)}")
         
-        tasks = []
-        for task in email_tasks:
-            task_coroutine = self.send_single_email(
-                task['driver_name'],
-                task['email'],
-                task['pdf_buffer']
-            )
-            tasks.append(task_coroutine)
+        # Process in smaller batches to avoid overwhelming the SMTP server
+        batch_size = 5
+        all_results = []
         
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for i in range(0, len(email_tasks), batch_size):
+            batch = email_tasks[i:i + batch_size]
+            tasks = []
+            for task in batch:
+                task_coroutine = self.send_single_email(
+                    task['driver_name'],
+                    task['email'],
+                    task['pdf_buffer']
+                )
+                tasks.append(task_coroutine)
+            
+            # Add a small delay between batches
+            if i > 0:
+                await asyncio.sleep(1)
+                
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            all_results.extend(batch_results)
         
+        # Process results
         emails_sent = []
         failed_emails = []
         
-        for result in results:
+        for result in all_results:
             if isinstance(result, dict):
                 if result['status'] == 'sent':
                     emails_sent.append(result)
                 else:
                     failed_emails.append(result)
             else:
+                # Handle exceptions
                 failed_emails.append({
                     'status': 'failed',
                     'error': str(result)
                 })
+        
+        print("\n=== Email Sending Summary ===")
+        print(f"Successfully sent: {len(emails_sent)}")
+        print(f"Failed to send: {len(failed_emails)}")
+        
+        if failed_emails:
+            print("\nFailed emails:")
+            for fail in failed_emails:
+                print(f"- {fail.get('name', 'Unknown')} ({fail.get('email', 'Unknown')}): {fail.get('error', 'Unknown error')}")
         
         return {
             'summary': {
