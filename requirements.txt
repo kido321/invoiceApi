@@ -15,7 +15,7 @@ numpy
 openpyxl
 pandas
 pillow
-python-dateuti
+python-dateutil
 python-dotenv
 pytz
 reportlab
