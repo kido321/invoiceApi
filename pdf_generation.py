@@ -17,42 +17,7 @@ def calculate_net_pay(driver_name: str, gross_pay: float, pay_multiplier: float,
     if driver_name == "Djebar Kacimi" and is_final_total:
         return (gross_pay * pay_multiplier) + 600
     return gross_pay * pay_multiplier
-# def calculate_net_pay(driver_name: str, gross_pay: float, is_final_total: bool = False) -> float:
-#     """Calculate net pay based on driver-specific rules"""
-#     if driver_name == "Azzedine  Boumeraou":
-#         return gross_pay  # 100% of income
-#     elif driver_name == "Djebar  Kacimi":
-#         base_pay = gross_pay  # Regular calculation for individual rows
-#         return base_pay + 600 if is_final_total else base_pay  # Only add $600 to final total
-#     elif driver_name == "Bilal  Bouhssane":
-#         return gross_pay * 0.8  # 80% of income
-#     elif driver_name == "Abdul Latif Hassani":
-#         print(gross_pay, 'gross_pay' , driver_name)
-#         return gross_pay * 0.73
-#     elif driver_name == "Chadi  Tebah":
-#         return gross_pay * 0.73
-#     elif driver_name == "Fatsah  Kennouche ":
-#         print(gross_pay, 'gross_pay')
-#         return gross_pay * 0.73
-#     elif driver_name == "Ghulam  Sarwar Safi":
-#         return gross_pay * 0.73
-#     elif driver_name == "Inamullah  Hamraz":
-#         return gross_pay * 0.73
-#     elif driver_name == "LWABOSH B PUKA":
-#         return gross_pay * 0.73
-#     elif driver_name == "Mustapa  Quraishi":
-#         return gross_pay * 0.73
-#     elif driver_name == "Najibullah  Halimi":
-#         return gross_pay * 0.73
-#     elif driver_name == "Samuel Suzi":
-#         return gross_pay * 0.73
-#     elif driver_name == "Sheraqa Shoresh":
-#         return gross_pay * 0.73
-#     elif driver_name == "Tarun Vachani":
-#         return gross_pay * 0.73
-#     else:
-#         return gross_pay * 0.75  # Default 75% of income
-
+    
 def create_paragraph_cell(text, style_name="Normal"):
     styles = getSampleStyleSheet()
     return Paragraph(text, styles[style_name])
